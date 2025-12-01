@@ -32,11 +32,21 @@ function App() {
       );
       setResultImage(URL.createObjectURL(response.data));
 
-      const detRes = await axios.get("http://127.0.0.1:8000/detections");
-      setDetections(detRes.data);
+      // Parse detections from response headers
+      const detHeader = response.headers["detections"];
+      if (detHeader) {
+        try {
+          // Convert single quotes to double quotes for JSON parsing
+          const parsed = JSON.parse(detHeader.replace(/'/g, '"'));
+          setDetections(parsed);
+        } catch (e) {
+          console.error("Failed to parse detections:", e);
+        }
+      }
 
     } catch (err) {
-      alert("Error processing image.");
+      console.error("Upload error:", err);
+      alert("Error processing image. Please try again.");
     }
 
     setLoading(false);
@@ -49,14 +59,14 @@ function App() {
       <p style={styles.subtitle}>AI-powered detection of marine debris</p>
 
       <div style={styles.grid}>
-        
+
         {/* Upload Card */}
         <div style={styles.card}>
           <h2 style={styles.sectionTitle}>Upload Image</h2>
 
           <div style={styles.uploadBox}>
             <label style={styles.uploadLabel}>
-              <input 
+              <input
                 type="file"
                 accept="image/*"
                 style={{ display: "none" }}

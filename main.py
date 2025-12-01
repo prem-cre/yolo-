@@ -1,12 +1,12 @@
-from fastapi import FastAPI, UploadFile, Response
+from fastapi import FastAPI, UploadFile, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 import cv2
 import numpy as np
+import json
 
 app = FastAPI()
 
-# CORS for frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,45 +15,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load your trained model
-model = YOLO("yolov8m.pt")
-
-
-# Global variable to store detections
-last_detections = []
+# Load YOLO v12 pretrained model (replace with your model path if custom e.g. best.pt)
+model = YOLO("yolo12n.pt")  # or yolo12s.pt / yolo12m.pt / your_model.pt
 
 @app.post("/upload")
 async def upload(file: UploadFile):
-    global last_detections
-    last_detections = []
+    try:
+        img_bytes = await file.read()
+        np_img = np.frombuffer(img_bytes, np.uint8)
+        img = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
 
-    # Read image as bytes
-    img_bytes = await file.read()
-    np_img = np.frombuffer(img_bytes, np.uint8)
-    img = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
+        if img is None:
+            raise HTTPException(status_code=400, detail="Invalid image file")
 
-    # Run YOLO
-    results = model(img, conf=0.05)[0]
+        # Run inference — multiple predictions supported
+        results = model.predict(source=img, conf=0.5, imgsz=640)[0]
 
+        detections = []
+        for box in results.boxes:
+            detections.append({
+                "class": results.names[int(box.cls)],
+                "confidence": float(box.conf)
+            })
 
+        # Draw bounding boxes on image
+        annotated = results.plot()
 
-    # Extract detections
-    for box in results.boxes:
-        cls_id = int(box.cls)
-        label = model.names[cls_id]
-        conf = float(box.conf)
-        last_detections.append({
-            "class": label,
-            "confidence": conf
-        })
+        _, buffer = cv2.imencode(".jpg", annotated)
 
-    # Get annotated image
-    annotated = results.plot()
+        return Response(
+            content=buffer.tobytes(),
+            media_type="image/jpeg",
+            headers={"detections": json.dumps(detections)}
+        )
 
-    _, buffer = cv2.imencode(".jpg", annotated)
-    return Response(content=buffer.tobytes(), media_type="image/jpeg")
-
-
-@app.get("/detections")
-def get_detections():
-    return last_detections
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Processing error: {str(e)}")

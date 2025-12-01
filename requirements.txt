@@ -3,3 +3,8 @@ uvicorn
 ultralytics
 python-multipart
 Pillow
+
+gunicorn
+opencv-python
+ultralytics
+numpy
