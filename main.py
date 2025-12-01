@@ -7,6 +7,10 @@ import json
 
 app = FastAPI()
 
+from fastapi.staticfiles import StaticFiles
+app.mount("/", StaticFiles(directory="frontend/build", html=True), name="frontend")
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
